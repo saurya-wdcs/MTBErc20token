@@ -1,199 +1,200 @@
-pragma solidity ^0.5.0;
+//SPDX-License-Identifier: UNLICENSED
 
-interface IERC20 {
-  function totalSupply() external view returns (uint256);
-  function balanceOf(address who) external view returns (uint256);
-  function allowance(address owner, address spender) external view returns (uint256);
-  function transfer(address to, uint256 value) external returns (bool);
-  function approve(address spender, uint256 value) external returns (bool);
-  function transferFrom(address from, address to, uint256 value) external returns (bool);
+pragma solidity ^0.6.8;
 
-  event Transfer(address indexed from, address indexed to, uint256 value);
-  event Approval(address indexed owner, address indexed spender, uint256 value);
-}
+import "https://github.com/freitasgouvea/token-erc-20/blob/master/contracts/interfaces/IERC20.sol";
+import "https://github.com/freitasgouvea/token-erc-20/blob/master/contracts/libraries/SafeMath.sol";
+import "https://github.com/freitasgouvea/token-erc-20/blob/master/contracts/ownership/Ownable.sol";
+import "https://github.com/freitasgouvea/token-erc-20/blob/master/contracts/lifecycle/Pausable.sol";
 
-library SafeMath {
-  function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-    if (a == 0) {
-      return 0;
+contract ERC20 is IERC20, Ownable, Pausable {
+
+    using SafeMath for uint;
+
+    string internal _name;
+    string internal _symbol;
+    uint8 internal _decimals;
+    uint256 internal _totalSupply;
+
+    mapping (address => uint256) internal _balances;
+    mapping (address => mapping (address => uint256)) internal _allowed;
+
+    event Mint(address indexed minter, address indexed account, uint256 amount);
+    event Burn(address indexed burner, address indexed account, uint256 amount);
+
+    constructor (
+        string memory name, 
+        string memory symbol, 
+        uint8 decimals, 
+        uint256 totalSupply
+    ) public
+    {
+        _symbol = symbol;
+        _name = name;
+        _decimals = decimals;
+        _totalSupply = totalSupply;
+        _balances[msg.sender] = totalSupply;
     }
-    uint256 c = a * b;
-    assert(c / a == b);
-    return c;
-  }
 
-  function div(uint256 a, uint256 b) internal pure returns (uint256) {
-    uint256 c = a / b;
-    return c;
-  }
-
-  function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-    assert(b <= a);
-    return a - b;
-  }
-
-  function add(uint256 a, uint256 b) internal pure returns (uint256) {
-    uint256 c = a + b;
-    assert(c >= a);
-    return c;
-  }
-
-  function ceil(uint256 a, uint256 m) internal pure returns (uint256) {
-    uint256 c = add(a,m);
-    uint256 d = sub(c,1);
-    return mul(div(d,m),m);
-  }
-}
-
-contract ERC20Detailed is IERC20 {
-
-  string private _name;
-  string private _symbol;
-  uint8 private _decimals;
-
-  constructor(string memory name, string memory symbol, uint8 decimals) public {
-    _name = name;
-    _symbol = symbol;
-    _decimals = decimals;
-  }
-
-  function name() public view returns(string memory) {
-    return _name;
-  }
-
-  function symbol() public view returns(string memory) {
-    return _symbol;
-  }
-
-  function decimals() public view returns(uint8) {
-    return _decimals;
-  }
-}
-
-contract BUNA is ERC20Detailed {
-
-  using SafeMath for uint256;
-  mapping (address => uint256) private _balances;
-  mapping (address => mapping (address => uint256)) private _allowed;
-
-  string constant tokenName = "BUNA";
-  string constant tokenSymbol = "BNA";
-  uint8  constant tokenDecimals = 18;
-  uint256 _totalSupply = 500000*10**18;
-  uint256 public basePercent = 100;
-  uint256 public _burnStopAmount;
-  uint256 public _lastTokenSupply;
-  
-  constructor() public payable ERC20Detailed(tokenName, tokenSymbol, tokenDecimals) {
-
-    _mint(msg.sender, _totalSupply);
-    _burnStopAmount = 0;
-    _lastTokenSupply = 200000 * 10**18;
-  }
-
-  function totalSupply() public view returns (uint256) {
-    return _totalSupply;
-  }
-
-  function balanceOf(address owner) public view returns (uint256) {
-    return _balances[owner];
-  }
-
-  function allowance(address owner, address spender) public view returns (uint256) {
-    return _allowed[owner][spender];
-  }
-
-  function findOnePercent(uint256 value) public view returns (uint256)  {
-    uint256 roundValue = value.ceil(basePercent);
-    uint256 onePercent = roundValue.mul(basePercent).div(10000);
-    return onePercent;
-  }
-
-  function transfer(address to, uint256 value) public returns (bool) {
-    require(value <= _balances[msg.sender]);
-    require(to != address(0));
-
-    uint256 tokensToBurn = findOnePercent(value);
-    uint256 tokensToTransfer = value.sub(tokensToBurn);
-
-    _balances[msg.sender] = _balances[msg.sender].sub(value);
-    _balances[to] = _balances[to].add(tokensToTransfer);
-
-    _totalSupply = _totalSupply.sub(tokensToBurn);
-
-    emit Transfer(msg.sender, to, tokensToTransfer);
-    emit Transfer(msg.sender, address(0), tokensToBurn);
-    return true;
-  }
-
-  function multiTransfer(address[] memory receivers, uint256[] memory amounts) public {
-    for (uint256 i = 0; i < receivers.length; i++) {
-      transfer(receivers[i], amounts[i]);
+    function name(
+    ) public view returns (string memory)
+    {
+        return _name;
     }
-  }
 
-  function approve(address spender, uint256 value) public returns (bool) {
-    require(spender != address(0));
-    _allowed[msg.sender][spender] = value;
-    emit Approval(msg.sender, spender, value);
-    return true;
-  }
+    function symbol(
+    ) public view returns (string memory)
+    {
+        return _symbol;
+    }
 
-  function transferFrom(address from, address to, uint256 value) public returns (bool) {
-    require(value <= _balances[from]);
-    require(value <= _allowed[from][msg.sender]);
-    require(to != address(0));
+    function decimals(
+    ) public view returns (uint8)
+    {
+        return _decimals;
+    }
 
-    _balances[from] = _balances[from].sub(value);
+    function totalSupply(
+    ) public view returns (uint256)
+    {
+        return _totalSupply;
+    }
 
-    uint256 tokensToBurn = findOnePercent(value);
-    uint256 tokensToTransfer = value.sub(tokensToBurn);
+    function transfer(
+        address _to, 
+        uint256 _value
+    ) public override
+        whenNotPaused 
+      returns (bool)
+    {
+        require(_to != address(0), 'ERC20: to address is not valid');
+        require(_value <= _balances[msg.sender], 'ERC20: insufficient balance');
+        
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], _value);
+        _balances[_to] = SafeMath.add(_balances[_to], _value);
+        
+        emit Transfer(msg.sender, _to, _value);
+        
+        return true;
+    }
 
-    _balances[to] = _balances[to].add(tokensToTransfer);
-    _totalSupply = _totalSupply.sub(tokensToBurn);
+   function balanceOf(
+       address _owner
+    ) public override view returns (uint256 balance) 
+    {
+        return _balances[_owner];
+    }
 
-    _allowed[from][msg.sender] = _allowed[from][msg.sender].sub(value);
+    function approve(
+       address _spender, 
+       uint256 _value
+    ) public override
+        whenNotPaused
+      returns (bool) 
+    {
+        _allowed[msg.sender][_spender] = _value;
+        
+        emit Approval(msg.sender, _spender, _value);
+        
+        return true;
+   }
 
-    emit Transfer(from, to, tokensToTransfer);
-    emit Transfer(from, address(0), tokensToBurn);
+   function transferFrom(
+        address _from, 
+        address _to, 
+        uint256 _value
+    ) public override
+        whenNotPaused
+      returns (bool) 
+    {
+        require(_from != address(0), 'ERC20: from address is not valid');
+        require(_to != address(0), 'ERC20: to address is not valid');
+        require(_value <= _balances[_from], 'ERC20: insufficient balance');
+        require(_value <= _allowed[_from][msg.sender], 'ERC20: from not allowed');
 
-    return true;
-  }
+        _balances[_from] = SafeMath.sub(_balances[_from], _value);
+        _balances[_to] = SafeMath.add(_balances[_to], _value);
+        _allowed[_from][msg.sender] = SafeMath.sub(_allowed[_from][msg.sender], _value);
+        
+        emit Transfer(_from, _to, _value);
+        
+        return true;
+   }
 
-  function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
-    require(spender != address(0));
-    _allowed[msg.sender][spender] = (_allowed[msg.sender][spender].add(addedValue));
-    emit Approval(msg.sender, spender, _allowed[msg.sender][spender]);
-    return true;
-  }
+    function allowance(
+        address _owner, 
+        address _spender
+    ) public override view 
+        whenNotPaused
+      returns (uint256) 
+    {
+        return _allowed[_owner][_spender];
+    }
 
-  function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
-    require(spender != address(0));
-    _allowed[msg.sender][spender] = (_allowed[msg.sender][spender].sub(subtractedValue));
-    emit Approval(msg.sender, spender, _allowed[msg.sender][spender]);
-    return true;
-  }
+    function increaseApproval(
+        address _spender, 
+        uint _addedValue
+    ) public
+        whenNotPaused
+      returns (bool)
+    {
+        _allowed[msg.sender][_spender] = SafeMath.add(_allowed[msg.sender][_spender], _addedValue);
+        
+        emit Approval(msg.sender, _spender, _allowed[msg.sender][_spender]);
+        
+        return true;
+    }
 
-  function _mint(address account, uint256 amount) internal {
-    require(amount != 0);
-    _balances[account] = _balances[account].add(amount);
-    emit Transfer(address(0), account, amount);
-  }
+    function decreaseApproval(
+        address _spender, 
+        uint _subtractedValue
+    ) public
+        whenNotPaused
+      returns (bool) 
+    {
+        uint oldValue = _allowed[msg.sender][_spender];
+        
+        if (_subtractedValue > oldValue) {
+            _allowed[msg.sender][_spender] = 0;
+        } else {
+            _allowed[msg.sender][_spender] = SafeMath.sub(oldValue, _subtractedValue);
+        }
+        
+        emit Approval(msg.sender, _spender, _allowed[msg.sender][_spender]);
+        
+        return true;
+   }
 
-  function burn(uint256 amount) external {
-    _burn(msg.sender, amount);
-  }
-  function _burn(address account, uint256 amount) internal {
-    require(amount != 0);
-    require(amount <= _balances[account]);
-    _totalSupply = _totalSupply.sub(amount);
-    _balances[account] = _balances[account].sub(amount);
-    emit Transfer(account, address(0), amount);
-  }
+    function mintTo(
+        address _to,
+        uint _amount
+    ) public
+        whenNotPaused
+        onlyOwner
+    {
+        require(_to != address(0), 'ERC20: to address is not valid');
+        require(_amount > 0, 'ERC20: amount is not valid');
 
-  function burnFrom(address account, uint256 amount) external {
-    require(amount <= _allowed[account][msg.sender]);
-    _allowed[account][msg.sender] = _allowed[account][msg.sender].sub(amount);
-    _burn(account, amount);
-  }
+        _totalSupply = _totalSupply.add(_amount);
+        _balances[_to] = _balances[_to].add(_amount);
+
+        emit Mint(msg.sender, _to, _amount);
+    }
+
+    function burnFrom(
+        address _from,
+        uint _amount
+    ) public
+        whenNotPaused
+        onlyOwner
+    {
+        require(_from != address(0), 'ERC20: from address is not valid');
+        require(_balances[_from] >= _amount, 'ERC20: insufficient balance');
+        
+        _balances[_from] = _balances[_from].sub(_amount);
+        _totalSupply = _totalSupply.sub(_amount);
+
+        emit Burn(msg.sender, _from, _amount);
+    }
+
 }
